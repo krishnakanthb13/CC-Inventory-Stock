@@ -5,6 +5,15 @@
 
 ---
 
+## 🌐 Repositories & Live Deployment
+
+| Component | Repository | Role | Live URL / Deployment |
+|---|---|---|---|
+| **Admin & Inventory Engine** | [`krishnakanthb13/CC-Inventory-Stock`](https://github.com/krishnakanthb13/CC-Inventory-Stock) | Monorepo root, catalog CRUD, size stock matrix | Localhost (`:3000`) |
+| **Public Storefront** | [`krishnakanthb13/CC-Hosting-Public`](https://github.com/krishnakanthb13/CC-Hosting-Public) | Git submodule, e-commerce storefront, UPI & WhatsApp | [crownandcross.vercel.app](https://crownandcross.vercel.app) |
+
+---
+
 ## ⚡ Quick Start (< 5 Minutes)
 
 ### Prerequisites
