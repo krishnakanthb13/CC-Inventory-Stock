@@ -66,6 +66,7 @@ export default function AdminPage() {
     stockQuantity: 20,
     stockStatus: 'In Stock',
     sizes: ['S', 'M', 'L', 'XL'],
+    stockBySize: { S: 5, M: 5, L: 5, XL: 5 },
     images: ['https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=800&q=80'],
     description: '',
     featured: false,
@@ -267,6 +268,15 @@ export default function AdminPage() {
 
   const openEditModal = (p) => {
     setEditingProduct(p);
+    const activeSizes = Array.isArray(p.sizes) && p.sizes.length > 0 ? p.sizes : ['S', 'M', 'L', 'XL'];
+    const stockMap = {};
+    activeSizes.forEach((sz) => {
+      stockMap[sz] = p.stockBySize?.[sz] !== undefined
+        ? Number(p.stockBySize[sz])
+        : Math.max(0, Math.floor((p.stockQuantity ?? 10) / activeSizes.length));
+    });
+    const computedTotal = Object.values(stockMap).reduce((a, b) => a + b, 0);
+
     setFormData({
       name: p.name || '',
       category: p.category || 'Club',
@@ -275,9 +285,10 @@ export default function AdminPage() {
       season: p.season || '',
       price: p.price || 0,
       mrp: p.mrp || 0,
-      stockQuantity: p.stockQuantity ?? 10,
-      stockStatus: p.stockStatus || 'In Stock',
-      sizes: p.sizes || ['S', 'M', 'L', 'XL'],
+      stockQuantity: computedTotal,
+      stockStatus: computedTotal > 0 ? (p.stockStatus || 'In Stock') : 'Out of Stock',
+      sizes: activeSizes,
+      stockBySize: p.stockBySize ? { ...p.stockBySize } : stockMap,
       images: p.images || [''],
       description: p.description || '',
       featured: Boolean(p.featured),
@@ -923,7 +934,32 @@ export default function AdminPage() {
 
                       {/* Stock Qty */}
                       <td style={{ padding: '14px 16px' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.stockQuantity ?? 0}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>
+                            {p.stockQuantity ?? 0} <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>units</span>
+                          </span>
+                          {p.stockBySize && Object.keys(p.stockBySize).length > 0 ? (
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                              {Object.entries(p.stockBySize).map(([sz, qty]) => (
+                                <span
+                                  key={sz}
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    backgroundColor: qty > 0 ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                    color: qty > 0 ? '#4ade80' : '#ef4444',
+                                    border: `1px solid ${qty > 0 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                                  }}
+                                  title={`Size ${sz}: ${qty} in stock`}
+                                >
+                                  {sz}:{qty}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
                       </td>
 
                       {/* Quick Status Dropdown */}
@@ -1276,56 +1312,152 @@ export default function AdminPage() {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                    Stock Quantity
+                    Total Stock (Auto-Calculated)
                   </label>
                   <input
                     type="number"
                     min="0"
-                    value={formData.stockQuantity}
-                    onChange={(e) => setFormData({ ...formData, stockQuantity: Number(e.target.value) })}
+                    readOnly
+                    value={formData.stockQuantity || 0}
                     style={{
                       width: '100%',
                       padding: '10px 12px',
-                      backgroundColor: 'var(--bg-primary)',
+                      backgroundColor: 'rgba(255,255,255,0.03)',
                       border: '1px solid var(--border-subtle)',
                       borderRadius: '10px',
-                      color: 'var(--text-primary)',
-                      fontSize: '13px'
+                      color: 'var(--gold-primary)',
+                      fontSize: '13px',
+                      fontWeight: 800
                     }}
                   />
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                  Available Sizes
-                </label>
-                <div style={{ display: 'flex', gap: '10px' }}>
+              {/* Size-Specific Stock Quantity Matrix */}
+              <div style={{ backgroundColor: 'var(--bg-primary)', padding: '16px', borderRadius: '14px', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      Size-Specific Stock Quantity Matrix
+                    </span>
+                    <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Set individual stock units per size. Sizes with 0 units will automatically show as "Sold Out" on the public store.
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      color: (formData.stockQuantity || 0) > 0 ? '#22c55e' : '#ef4444',
+                      backgroundColor: (formData.stockQuantity || 0) > 0 ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      border: `1px solid ${(formData.stockQuantity || 0) > 0 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                    }}
+                  >
+                    {formData.stockQuantity || 0} Total Units Available
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))', gap: '10px', marginTop: '12px' }}>
                   {AVAILABLE_SIZES.map((sz) => {
                     const isChecked = formData.sizes.includes(sz);
+                    const currentQty = formData.stockBySize?.[sz] !== undefined ? formData.stockBySize[sz] : 0;
+
                     return (
-                      <button
-                        type="button"
+                      <div
                         key={sz}
-                        onClick={() => {
-                          const nextSizes = isChecked
-                            ? formData.sizes.filter((s) => s !== sz)
-                            : [...formData.sizes, sz];
-                          setFormData({ ...formData, sizes: nextSizes });
-                        }}
                         style={{
-                          padding: '8px 14px',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          backgroundColor: isChecked ? 'var(--gold-primary)' : 'var(--bg-primary)',
-                          color: isChecked ? '#0e1410' : 'var(--text-secondary)',
-                          border: `1px solid ${isChecked ? 'var(--gold-primary)' : 'var(--border-subtle)'}`
+                          backgroundColor: isChecked ? 'rgba(200, 169, 106, 0.07)' : 'var(--bg-surface)',
+                          border: `1px solid ${isChecked ? 'var(--gold-primary)' : 'var(--border-subtle)'}`,
+                          borderRadius: '12px',
+                          padding: '10px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
                         }}
                       >
-                        {sz}
-                      </button>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              let nextSizes;
+                              let nextStock = { ...(formData.stockBySize || {}) };
+                              if (isChecked) {
+                                nextSizes = formData.sizes.filter((s) => s !== sz);
+                                nextStock[sz] = 0;
+                              } else {
+                                nextSizes = [...formData.sizes, sz];
+                                if (!nextStock[sz] || nextStock[sz] === 0) {
+                                  nextStock[sz] = 5;
+                                }
+                              }
+                              const sumQty = Object.entries(nextStock).reduce((acc, [s, q]) => nextSizes.includes(s) ? acc + Number(q || 0) : acc, 0);
+                              setFormData({
+                                ...formData,
+                                sizes: nextSizes,
+                                stockBySize: nextStock,
+                                stockQuantity: sumQty,
+                                stockStatus: sumQty > 0 ? 'In Stock' : 'Out of Stock'
+                              });
+                            }}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              backgroundColor: isChecked ? 'var(--gold-primary)' : 'var(--bg-elevated)',
+                              color: isChecked ? '#0e1410' : 'var(--text-secondary)',
+                              border: `1px solid ${isChecked ? 'var(--gold-primary)' : 'var(--border-subtle)'}`
+                            }}
+                            title={isChecked ? 'Click to disable size' : 'Click to enable size'}
+                          >
+                            Size {sz}
+                          </button>
+
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: isChecked ? (currentQty > 0 ? '#4ade80' : '#ef4444') : 'var(--text-muted)' }}>
+                            {isChecked ? (currentQty > 0 ? `${currentQty} in stock` : 'Sold Out') : 'Off'}
+                          </span>
+                        </div>
+
+                        {isChecked && (
+                          <div style={{ marginTop: '4px' }}>
+                            <label style={{ display: 'block', fontSize: '10.5px', color: 'var(--text-secondary)', marginBottom: '3px', fontWeight: 600 }}>
+                              Qty in Stock:
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={currentQty}
+                              onChange={(e) => {
+                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                const nextStock = { ...(formData.stockBySize || {}), [sz]: val };
+                                const sumQty = Object.entries(nextStock).reduce((acc, [s, q]) => formData.sizes.includes(s) ? acc + Number(q || 0) : acc, 0);
+                                setFormData({
+                                  ...formData,
+                                  stockBySize: nextStock,
+                                  stockQuantity: sumQty,
+                                  stockStatus: sumQty > 0 ? 'In Stock' : 'Out of Stock'
+                                });
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                backgroundColor: 'var(--bg-surface)',
+                                border: '1px solid var(--border-subtle)',
+                                borderRadius: '8px',
+                                color: 'var(--text-primary)',
+                                fontSize: '13px',
+                                fontWeight: 700,
+                                textAlign: 'center'
+                              }}
+                              placeholder="0"
+                            />
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>

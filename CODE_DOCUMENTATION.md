@@ -182,6 +182,29 @@ Provides unified deep-linking that guarantees pre-filled recipient phone (`+91 7
     - Integrated clickable Instagram icon button (`nav-insta-btn`) beside WhatsApp on desktop and mobile viewports.
     - Mobile drawer features a direct follow button (`.mobile-dropdown-insta`).
     - Footer brand column includes a dedicated luxury follow card with gradient badge, inline support list entry, and bottom metadata link.
-13. **Product Detail Page Reliability (`app/product/[id]/page.jsx`):**
-    - Resolved related kits query mapping error (`relatedKits`) ensuring category recommendations render cleanly without runtime exceptions.
+13. **Minimalist Icon-Only Header Actions & Footer Contact Standardization (`Navbar.jsx`, `Footer.jsx`):**
+    - Removed text labels for Search and Instagram in `Navbar.jsx`, deploying sleek `38px x 38px` circular icon buttons with centered Lucide icons.
+    - Standardized footer support links strictly as `Contact Us: Whatsapp` and `Contact Us: Instagram` with matching hover effects.
+14. **Two Products Per Row Mobile Grid (`ProductCard.jsx`, `globals.css`):**
+    - Configured `@media (max-width: 640px)` 2-column grid layout (`repeat(2, minmax(0, 1fr))`) across catalog, featured, and related product sections.
+    - Proportional card typography, compact padding, and responsive badges tailored for mobile tap boundaries.
+15. **Mobile-Only 1-Tap UPI App Launcher (`UpiModal.jsx`, `CartDrawer.jsx`, `app/product/[id]/page.jsx`):**
+    - Universal `upi://pay` intent deep-linking triggering native app choosers across Android and iOS (Google Pay, PhonePe, Paytm, CRED, BHIM).
+    - Isolated strictly to mobile viewports (`<= 768px`) with high-conversion active CTA styling.
+16. **Mobile Section Spacing & Bottom Padding Optimization (`globals.css`, `app/page.jsx`, `app/product/[id]/page.jsx`):**
+    - Tightened desktop-scale section margins (`margin: 90px auto 0` down to `24px`), container paddings, and footer gaps after product grids on mobile viewports.
+17. **Size-Specific Stock Quantity System (`admin`, `CC-Hosting-Public`, `products.json`):**
+    - **Data Schema (`stockBySize`)**: Stored per-product object mapping individual sizes (`S`, `M`, `L`, `XL`, `XXL`) to exact inventory counts, auto-synchronizing with total `stockQuantity` and `stockStatus`.
+    - **Admin Matrix**: Integrated visual stock matrix inside product add/edit modals with real-time sum auto-calculation, size toggle controls, and quick-glance size badges in the inventory table.
+    - **Storefront PDP UX**: Dynamically disables sold-out sizes with "Sold Out" strikethroughs, displays clean `● In Stock` without unit count leakage when stock is healthy ($> 2$), renders low-stock urgency alerts ("Only X left in Size L!") when $\le 2$, and caps maximum quantities.
+18. **Limited Stock Notification & Cart Overflow Protection (`CartContext.jsx`, `LayoutClientWrapper.jsx`, `CartDrawer.jsx`):**
+    - **Stock Toast System**: Dispatches auto-dismissing (3.8s) floating glassmorphism amber toasts with `AlertTriangle` icon on illegal increment attempts.
+    - **In-Cart Stock Deduction**: PDP dynamically cross-checks cart quantities for the selected size (`remainingStock = availableStock - inCartQty`).
+    - **Button Auto-Disable**: Automatically disables the Add to Cart button with text `All Stock in Cart (X/X)` and an inline alert banner when all available inventory for that size is already in the cart.
+    - **Tactile Feedback**: Implemented `animate-shake` on the quantity stepper and disabled `+` buttons across both PDP and slide-out Cart Drawer when inventory ceiling is reached.
+19. **Automated Pre-Flight Production Build Launcher (`scripts/start.js`, `start.bat`, `start.sh`):**
+    - Integrated sequential compilation step (`npm run build`) in `admin/` and `CC-Hosting-Public/` prior to spawning local development servers.
+    - Prevents runtime Next.js bundle corruption and guarantees zero deployment surprises across Windows, Mac, and Linux environments.
+
+
 

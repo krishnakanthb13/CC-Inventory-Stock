@@ -110,37 +110,80 @@ function run(name, command, cwd) {
   return child;
 }
 
-// Start Admin on port 3000
-const adminProcess = run("Admin", "npm run dev", adminDir);
+function runBuild(name, cwd) {
+  return new Promise((resolve, reject) => {
+    console.log(`>>> [Pre-Flight Build] Compiling ${name}...`);
+    const child = spawn("npm run build", {
+      cwd,
+      stdio: "inherit",
+      shell: true,
+      env: process.env
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        console.log(`✓ [Pre-Flight Build] ${name} compiled successfully.\n`);
+        resolve();
+      } else {
+        console.error(`✕ [Pre-Flight Build] ${name} build failed with exit code ${code}.\n`);
+        reject(new Error(`${name} build failed`));
+      }
+    });
+    child.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
 
-// Start Public Storefront on port 3001
-const publicProcess = run("Store", "npm run dev", publicDir);
+let adminProcess = null;
+let publicProcess = null;
 
-// Automatically open in browser once each service responds
-waitForUrlAndOpen("http://localhost:3000", "Admin Portal", 0);
-waitForUrlAndOpen("http://localhost:3001", "Public Storefront", 800);
+async function start() {
+  try {
+    console.log("-----------------------------------------------------");
+    console.log("  Running pre-launch production builds...");
+    console.log("-----------------------------------------------------\n");
+    await runBuild("Admin Portal", adminDir);
+    await runBuild("Public Storefront", publicDir);
+    console.log("✓ All builds completed successfully! Launching dev servers...\n");
+  } catch (err) {
+    console.error("Aborting launch due to build failure. Please fix build errors above.");
+    process.exit(1);
+  }
+
+  // Start Admin on port 3000
+  adminProcess = run("Admin", "npm run dev", adminDir);
+
+  // Start Public Storefront on port 3001
+  publicProcess = run("Store", "npm run dev", publicDir);
+
+  // Automatically open in browser once each service responds
+  waitForUrlAndOpen("http://localhost:3000", "Admin Portal", 0);
+  waitForUrlAndOpen("http://localhost:3001", "Public Storefront", 800);
+}
+
+start();
 
 const shutdown = () => {
   console.log("\nShutting down Crown & Cross servers...");
   activePollers.forEach((p) => clearInterval(p));
   try {
     if (process.platform === "win32") {
-      if (adminProcess.pid) {
+      if (adminProcess && adminProcess.pid) {
         spawn("taskkill", ["/pid", adminProcess.pid, "/T", "/F"], { stdio: "ignore" });
       }
-      if (publicProcess.pid) {
+      if (publicProcess && publicProcess.pid) {
         spawn("taskkill", ["/pid", publicProcess.pid, "/T", "/F"], { stdio: "ignore" });
       }
     } else {
       try {
-        if (adminProcess.pid) process.kill(-adminProcess.pid, "SIGTERM");
+        if (adminProcess && adminProcess.pid) process.kill(-adminProcess.pid, "SIGTERM");
       } catch (_) {
-        if (adminProcess.kill) adminProcess.kill("SIGTERM");
+        if (adminProcess && adminProcess.kill) adminProcess.kill("SIGTERM");
       }
       try {
-        if (publicProcess.pid) process.kill(-publicProcess.pid, "SIGTERM");
+        if (publicProcess && publicProcess.pid) process.kill(-publicProcess.pid, "SIGTERM");
       } catch (_) {
-        if (publicProcess.kill) publicProcess.kill("SIGTERM");
+        if (publicProcess && publicProcess.kill) publicProcess.kill("SIGTERM");
       }
     }
   } catch (_) { }

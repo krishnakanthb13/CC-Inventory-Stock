@@ -110,6 +110,16 @@ export async function POST(request) {
     const newId = product.id || `cc-${String(Date.now()).slice(-6)}`;
     const newSlug = product.slug || createSlug(product.name);
 
+    const sizes = Array.isArray(product.sizes) && product.sizes.length > 0 ? product.sizes : ['S', 'M', 'L', 'XL'];
+    let stockBySize = product.stockBySize && typeof product.stockBySize === 'object'
+      ? { ...product.stockBySize }
+      : {};
+    if (Object.keys(stockBySize).length === 0) {
+      const perSize = Math.max(0, Math.floor((Number(product.stockQuantity) || 10) / sizes.length));
+      sizes.forEach((s) => { stockBySize[s] = perSize; });
+    }
+    const totalQty = Object.values(stockBySize).reduce((a, b) => Number(a || 0) + Number(b || 0), 0);
+
     const newProduct = {
       id: newId,
       slug: newSlug,
@@ -120,10 +130,11 @@ export async function POST(request) {
       season: product.season || '2023/24',
       price: Number(product.price) || 0,
       mrp: Number(product.mrp) || Number(product.price) * 1.5,
-      inStock: product.inStock !== false,
-      stockStatus: product.stockStatus || (product.inStock ? 'In Stock' : 'Out of Stock'),
-      stockQuantity: Number(product.stockQuantity) || 10,
-      sizes: Array.isArray(product.sizes) ? product.sizes : ['S', 'M', 'L', 'XL'],
+      inStock: totalQty > 0,
+      stockStatus: totalQty > 0 ? (product.stockStatus || 'In Stock') : 'Out of Stock',
+      stockQuantity: totalQty,
+      sizes,
+      stockBySize,
       images: Array.isArray(product.images) && product.images.length > 0 
         ? product.images 
         : ['https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=800&q=80'],
@@ -156,12 +167,24 @@ export async function PUT(request) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
+    let computedStock = data.products[index].stockQuantity ?? 10;
+    let stockBySize = updates.stockBySize !== undefined ? updates.stockBySize : data.products[index].stockBySize;
+
+    if (stockBySize && typeof stockBySize === 'object' && Object.keys(stockBySize).length > 0) {
+      computedStock = Object.values(stockBySize).reduce((a, b) => Number(a || 0) + Number(b || 0), 0);
+    } else if (updates.stockQuantity !== undefined) {
+      computedStock = Number(updates.stockQuantity);
+    }
+
     data.products[index] = {
       ...data.products[index],
       ...updates,
       price: updates.price ? Number(updates.price) : data.products[index].price,
       mrp: updates.mrp ? Number(updates.mrp) : data.products[index].mrp,
-      stockQuantity: updates.stockQuantity !== undefined ? Number(updates.stockQuantity) : data.products[index].stockQuantity
+      stockQuantity: computedStock,
+      stockBySize: stockBySize || {},
+      inStock: computedStock > 0,
+      stockStatus: computedStock > 0 ? (updates.stockStatus || data.products[index].stockStatus || 'In Stock') : 'Out of Stock'
     };
 
     saveProductsData(data);
@@ -197,7 +220,7 @@ export async function DELETE(request) {
 export async function PATCH(request) {
   try {
     const payload = await request.json();
-    const { id, stockStatus, inStock, stockQuantity } = payload;
+    const { id, stockStatus, inStock, stockQuantity, stockBySize } = payload;
     if (!id) {
       return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
     }
@@ -208,9 +231,16 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    if (stockStatus !== undefined) product.stockStatus = stockStatus;
-    if (inStock !== undefined) product.inStock = inStock;
-    if (stockQuantity !== undefined) product.stockQuantity = Number(stockQuantity);
+    if (stockBySize !== undefined && typeof stockBySize === 'object') {
+      product.stockBySize = stockBySize;
+      product.stockQuantity = Object.values(stockBySize).reduce((a, b) => Number(a || 0) + Number(b || 0), 0);
+      product.inStock = product.stockQuantity > 0;
+      product.stockStatus = product.stockQuantity > 0 ? (stockStatus || product.stockStatus || 'In Stock') : 'Out of Stock';
+    } else {
+      if (stockStatus !== undefined) product.stockStatus = stockStatus;
+      if (inStock !== undefined) product.inStock = inStock;
+      if (stockQuantity !== undefined) product.stockQuantity = Number(stockQuantity);
+    }
 
     saveProductsData(data);
     return NextResponse.json({ success: true, message: 'Stock status updated', product });

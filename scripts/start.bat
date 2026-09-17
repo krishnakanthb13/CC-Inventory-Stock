@@ -4,7 +4,7 @@ cls
 echo =====================================================
 echo   Crown ^& Cross - Windows Local Launcher
 echo =====================================================
-echo Starting Admin Portal and Public Storefront...
+echo Running pre-flight builds and starting Crown & Cross...
 echo.
 node "%~dp0start.js"
 pause
