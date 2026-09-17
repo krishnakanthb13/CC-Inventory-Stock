@@ -108,6 +108,9 @@ The Crown & Cross Admin Portal (`http://localhost:3000`) provides comprehensive 
    - Action-oriented **"Contact Us"** and **"Email Us"** controls replacing cluttered raw phone and email strings.
    - High-trust footer architecture prioritizing merchant payee identity (**Jason Clement**) above support links.
    - Vertically centered brand emblem and manifesto headings on the `/about` story page.
+   - **Horizontal Scrolling Banner**: Mobile-responsive dual-track infinite marquee ticker for top announcements with touch swipe support.
+   - **Official Instagram Presence**: Clickable Instagram logo (`@_crown_and_cross_`) beside WhatsApp in navbar and throughout footer.
+   - **Universal Product Search Modal**: Magnifying glass icon opening live search (`Ctrl+K`) displaying names of all available kits, quality tags, and 1-click drilldown navigation.
 
 ---
 
@@ -125,6 +128,14 @@ The Crown & Cross Admin Portal (`http://localhost:3000`) provides comprehensive 
 ## 📜 Changelog
 
 ### [Unreleased]
+#### Added
+- **Global Interactive Product Search**: Header magnifying glass button and `Ctrl+K`/`Cmd+K` shortcut opening a live modal with real-time product search, available kit names, thumbnails, pricing, and 1-click drilldown.
+- **Instagram Channel Integration**: Clickable Instagram button (`nav-insta-btn`) beside WhatsApp on desktop and mobile, mobile drawer entry, and prominent footer follow card for official handle `@_crown_and_cross_`.
+- **Responsive Announcement Bar Marquee**: Seamless dual-track infinite horizontal scrolling ticker on narrow screens ($\le 860\text{px}$) with touch-drag support and hover pause.
+
+#### Fixed
+- **Product Drill-down Crash**: Resolved `ReferenceError: relatedKits is not defined` on `/product/[id]` pages by aligning the related items query variable name.
+
 #### Changed
 - **Storefront Navigation**: Streamlined header actions with semantic **Contact Us** button linking directly to WhatsApp.
 - **Storefront Header**: Implemented permanent static **Vintage Amber** (`#f59e0b`) accent on **Retro Kits** link.
@@ -142,4 +153,6 @@ The Crown & Cross Admin Portal (`http://localhost:3000`) provides comprehensive 
 
 ## 👤 Owner & Team
 - **Owner:** Jason Clement (`crownandcross29@gmail.com`)
+- **Instagram:** [@_crown_and_cross_](https://www.instagram.com/_crown_and_cross_)
+- **WhatsApp:** [+91 76959 24602](https://wa.me/917695924602)
 - **Location:** Chennai, Tamil Nadu, India

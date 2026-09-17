@@ -172,3 +172,16 @@ Provides unified deep-linking that guarantees pre-filled recipient phone (`+91 7
 7. **Static Accent Styling:** Styled **Retro Kits** (`.retro-highlight`, `.retro-mobile-link`) with a permanent **Vintage Amber** (`#f59e0b`) accent with matching `:hover` rules for consistent visual anchoring.
 8. **Centered Brand Storytelling Layout:** Wrapped the brand emblem and manifesto headings on `/about` in a centered flex column with `clamp(28px, 5vw, 42px)` fluid typography and `objectFit: 'cover'`.
 9. **Trust-Ranked Support Order:** In `Footer.jsx`, hoisted `UPI Payee: Jason Clement` to the #1 position under "Support & Orders" for instantaneous merchant legitimacy.
+10. **Dual-Track Infinite Announcement Marquee:** On narrow screens ($\le 860\text{px}$), `.navbar-announcement` activates a dual-track CSS keyframe loop (`bannerMarquee` over 26s). Track cloning ensures zero visual stutter or gap, while `-webkit-overflow-scrolling: touch` allows manual swipe inspection and auto-pauses on hover/focus.
+11. **Global Search Modal Architecture (`components/SearchModal.jsx`):**
+    - Triggered via top navbar magnifying glass icon, mobile drawer, or keyboard shortcut (`Ctrl+K` / `Cmd+K`).
+    - Caches catalog from `/data/products.json` and performs multi-token matching over `name`, `team`, `season`, `category`, `subCategory`, and `description`.
+    - Explicitly surfaces available product names, team badges, quality tier tags, stock status, and live pricing.
+    - 1-click drilldown navigates to `/product/[id]` and cleans up modal state.
+12. **Instagram Channel Routing (`@_crown_and_cross_`):**
+    - Integrated clickable Instagram icon button (`nav-insta-btn`) beside WhatsApp on desktop and mobile viewports.
+    - Mobile drawer features a direct follow button (`.mobile-dropdown-insta`).
+    - Footer brand column includes a dedicated luxury follow card with gradient badge, inline support list entry, and bottom metadata link.
+13. **Product Detail Page Reliability (`app/product/[id]/page.jsx`):**
+    - Resolved related kits query mapping error (`relatedKits`) ensuring category recommendations render cleanly without runtime exceptions.
+
