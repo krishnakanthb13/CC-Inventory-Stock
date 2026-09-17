@@ -205,6 +205,19 @@ Provides unified deep-linking that guarantees pre-filled recipient phone (`+91 7
 19. **Automated Pre-Flight Production Build Launcher (`scripts/start.js`, `start.bat`, `start.sh`):**
     - Integrated sequential compilation step (`npm run build`) in `admin/` and `CC-Hosting-Public/` prior to spawning local development servers.
     - Prevents runtime Next.js bundle corruption and guarantees zero deployment surprises across Windows, Mac, and Linux environments.
-
-
-
+20. **Mobile 2×2 Compact Luxury Trust Grid (`Footer.jsx`, `globals.css`):**
+    - Replaced the cumbersome 4-item vertical stack on mobile viewports ($\le 768\text{px}$) with an ergonomic 2-column, 2-row grid (`repeat(2, minmax(0, 1fr))`).
+    - Enriched trust cards with semantic navigation links (`/shipping-policy`, `/#catalog`, `/returns-policy`).
+    - Engineered the **Live WhatsApp Support** card (`.trust-item-wa`) as a high-conversion 1-tap direct chat trigger that launches native WhatsApp ordering via `triggerWhatsApp`.
+21. **Post-Product Bottom Block Spacing Harmonization (`app/page.jsx`, `globals.css`):**
+    - **Replaced Inline Rigid Margins**: Migrated hardcoded `style={{ margin: '90px auto 0' }}` and `padding: '48px 36px'` on `.quality-standards-section` and `.social-proof-section` into responsive CSS classes.
+    - **Balanced Desktop Rhythm**: Reduced massive desktop dead gaps between product catalog, quality standards, social proof, and footer from 90px/80px down to a cohesive 32px–36px.
+    - **Ultra-Compact Mobile Hierarchy ($\le 768\text{px}$ & $\le 480\text{px}$)**:
+      - Tightly unified section vertical margins to `18px` (`14px` on $\le 480\text{px}$).
+      - Shrunk Quality Standards card padding from 48px/36px to `16px 12px`, with item grid gap at `6px`.
+      - Shrunk Social Proof card padding to `12px` with single-column responsive flow and `8px` gap.
+      - Reduced `.cc-footer` top margin to `20px` and padding to `18px 12px 14px`, footer navigation columns gap to `16px`, and payments banner padding to `10px`, eliminating excessive scrolling voids.
+22. **Production Base Domain & Social Card Resolution (`app/layout.jsx`):**
+    - Configured explicit `metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://crownandcross.vercel.app')` inside the root layout metadata export.
+    - Completely eliminates Next.js App Router build-time warning (`⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images, using "http://localhost:3000"`).
+    - Guarantees external crawlers and messaging platforms (WhatsApp link previews, Twitter/X, iMessage, Facebook) resolve absolute asset paths (`https://crownandcross.vercel.app/images/logo.jpeg`) reliably.
