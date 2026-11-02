@@ -54,8 +54,8 @@ export default function AdminPage() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  // Form State
-  const initialForm = {
+  // Form State (factory — never share one mutable object reference across resets)
+  const createInitialForm = () => ({
     name: '',
     category: 'Club',
     subCategory: 'Player Version',
@@ -71,15 +71,15 @@ export default function AdminPage() {
     description: '',
     featured: false,
     isBestSeller: false
-  };
+  });
 
-  const [formData, setFormData] = useState(initialForm);
+  const [formData, setFormData] = useState(createInitialForm);
 
   // Fetch initial data
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/products');
+      const res = await apiFetch('/api/products');
       const json = await res.json();
       if (res.ok && json.products) {
         setData(json);
@@ -103,13 +103,20 @@ export default function AdminPage() {
     setTimeout(() => setNotice(null), 4000);
   };
 
+  // API helper — attaches the optional admin bearer token when configured
+  const apiFetch = (url, options = {}) => {
+    const token = process.env.NEXT_PUBLIC_ADMIN_TOKEN;
+    const headers = { ...(options.headers || {}) };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (options.body) headers['Content-Type'] = 'application/json';
+    return fetch(url, { ...options, headers });
+  };
+
   // Filtered products
   const filteredProducts = useMemo(() => {
     return (data.products || []).filter((item) => {
-      const matchesSearch =
-        item.name?.toLowerCase().includes(search.toLowerCase()) ||
-        item.team?.toLowerCase().includes(search.toLowerCase()) ||
-        item.season?.toLowerCase().includes(search.toLowerCase());
+      const haystack = `${String(item.name ?? '')} ${String(item.team ?? '')} ${String(item.season ?? '')}`.toLowerCase();
+      const matchesSearch = haystack.includes(search.toLowerCase());
 
       const matchesCat = categoryFilter === 'All' || item.category === categoryFilter;
       const matchesSubCat = subCategoryFilter === 'All' || item.subCategory === subCategoryFilter;
@@ -130,7 +137,7 @@ export default function AdminPage() {
     const inStock = list.filter((p) => p.stockStatus === 'In Stock').length;
     const lowStock = list.filter((p) => p.stockStatus === 'Low Stock').length;
     const outStock = list.filter((p) => p.stockStatus === 'Out of Stock').length;
-    const totalValue = list.reduce((acc, curr) => acc + (curr.price || 0) * (curr.stockQuantity || 0), 0);
+    const totalValue = list.reduce((acc, curr) => acc + (Number(curr.price) || 0) * (Number(curr.stockQuantity) || 0), 0);
 
     return { total, inStock, lowStock, outStock, totalValue };
   }, [data.products]);
@@ -138,14 +145,18 @@ export default function AdminPage() {
   // Dynamic taxonomy options derived from products.json
   const availableCategories = useMemo(() => {
     if (data.categories && data.categories.length > 0) {
-      return data.categories.map((c) => (typeof c === 'string' ? c : c.name));
+      return data.categories
+        .map((c) => (typeof c === 'string' ? c : c && c.name))
+        .filter(Boolean);
     }
     return DEFAULT_CATEGORIES;
   }, [data.categories]);
 
   const availableSubCategories = useMemo(() => {
     if (data.subCategories && data.subCategories.length > 0) {
-      return data.subCategories.map((s) => (typeof s === 'string' ? s : s.name));
+      return data.subCategories
+        .map((s) => (typeof s === 'string' ? s : s && s.name))
+        .filter(Boolean);
     }
     return DEFAULT_SUB_CATEGORIES;
   }, [data.subCategories]);
@@ -154,9 +165,8 @@ export default function AdminPage() {
   const handleQuickStockChange = async (productId, newStatus) => {
     try {
       const inStock = newStatus !== 'Out of Stock';
-      const res = await fetch('/api/products', {
+      const res = await apiFetch('/api/products', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: productId, stockStatus: newStatus, inStock })
       });
 
@@ -182,9 +192,8 @@ export default function AdminPage() {
     try {
       if (editingProduct) {
         // Edit existing
-        const res = await fetch('/api/products', {
+        const res = await apiFetch('/api/products', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: editingProduct.id, updates: formData })
         });
         const json = await res.json();
@@ -197,9 +206,8 @@ export default function AdminPage() {
         showNotice(`Updated ${formData.name}`);
       } else {
         // Add new
-        const res = await fetch('/api/products', {
+        const res = await apiFetch('/api/products', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ product: formData })
         });
         const json = await res.json();
@@ -214,7 +222,7 @@ export default function AdminPage() {
 
       setIsAddOpen(false);
       setEditingProduct(null);
-      setFormData(initialForm);
+      setFormData(createInitialForm());
       setLastSyncTime(new Date().toLocaleTimeString());
     } catch (err) {
       showNotice(`Error saving product: ${err.message}`, 'error');
@@ -227,7 +235,7 @@ export default function AdminPage() {
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/products?id=${deleteTarget.id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/products?id=${encodeURIComponent(deleteTarget.id)}`, { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Server error');
 
@@ -243,24 +251,23 @@ export default function AdminPage() {
     }
   };
 
-  // Trigger manual sync/re-export
-  const handleFullSync = async () => {
+  // Pull latest state from disk (products.json may also change via git or direct
+  // file edits — this reloads instead of pushing possibly-stale client state)
+  const handleReloadFromDisk = async () => {
     setSyncing(true);
     try {
-      const res = await fetch('/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullSync: true, data })
-      });
+      const res = await apiFetch('/api/products');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Server error');
-      if (json.data) {
-        setData(json.data);
+      if (json && Array.isArray(json.products)) {
+        setData(json);
+        showNotice(`Reloaded ${json.products.length} products from products.json on disk`);
+        setLastSyncTime(new Date().toLocaleTimeString());
+      } else {
+        throw new Error(json.error || 'Invalid catalog data on disk');
       }
-      showNotice(`Successfully synced ${json.data?.products?.length ?? data.products.length} products to CC-Hosting-Public/data/products.json!`);
-      setLastSyncTime(new Date().toLocaleTimeString());
     } catch (err) {
-      showNotice(`Sync error: ${err.message}`, 'error');
+      showNotice(`Reload failed: ${err.message}`, 'error');
     } finally {
       setSyncing(false);
     }
@@ -271,9 +278,13 @@ export default function AdminPage() {
     const activeSizes = Array.isArray(p.sizes) && p.sizes.length > 0 ? p.sizes : ['S', 'M', 'L', 'XL'];
     const stockMap = {};
     activeSizes.forEach((sz) => {
-      stockMap[sz] = p.stockBySize?.[sz] !== undefined
-        ? Number(p.stockBySize[sz])
-        : Math.max(0, Math.floor((p.stockQuantity ?? 10) / activeSizes.length));
+      const existing = p.stockBySize?.[sz];
+      if (existing !== undefined) {
+        const n = Number(existing);
+        stockMap[sz] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+      } else {
+        stockMap[sz] = Math.max(0, Math.floor((p.stockQuantity ?? 10) / activeSizes.length));
+      }
     });
     const computedTotal = Object.values(stockMap).reduce((a, b) => a + b, 0);
 
@@ -288,8 +299,8 @@ export default function AdminPage() {
       stockQuantity: computedTotal,
       stockStatus: computedTotal > 0 ? (p.stockStatus || 'In Stock') : 'Out of Stock',
       sizes: activeSizes,
-      stockBySize: p.stockBySize ? { ...p.stockBySize } : stockMap,
-      images: p.images || [''],
+      stockBySize: stockMap, // normalized: exactly one entry per active size, so displayed total == saved total
+      images: Array.isArray(p.images) && p.images.length > 0 ? p.images : [''],
       description: p.description || '',
       featured: Boolean(p.featured),
       isBestSeller: Boolean(p.isBestSeller)
@@ -301,9 +312,8 @@ export default function AdminPage() {
   const handleSaveBrand = async (brandData) => {
     setSyncing(true);
     try {
-      const res = await fetch('/api/products', {
+      const res = await apiFetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'updateBrand', brand: brandData })
       });
       const json = await res.json();
@@ -322,9 +332,8 @@ export default function AdminPage() {
   const handleSaveShipping = async ({ shipping, exchange }) => {
     setSyncing(true);
     try {
-      const res = await fetch('/api/products', {
+      const res = await apiFetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'updateShippingExchange', shipping, exchange })
       });
       const json = await res.json();
@@ -343,9 +352,8 @@ export default function AdminPage() {
   const handleSaveTaxonomy = async ({ categories, subCategories }) => {
     setSyncing(true);
     try {
-      const res = await fetch('/api/products', {
+      const res = await apiFetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'updateTaxonomy', categories, subCategories })
       });
       const json = await res.json();
@@ -364,9 +372,8 @@ export default function AdminPage() {
   const handleSaveRawJson = async (rawJsonText) => {
     setSyncing(true);
     try {
-      const res = await fetch('/api/products', {
+      const res = await apiFetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'updateRawJson', rawJson: rawJsonText })
       });
       const json = await res.json();
@@ -515,7 +522,7 @@ export default function AdminPage() {
           </a>
 
           <button
-            onClick={handleFullSync}
+            onClick={handleReloadFromDisk}
             disabled={syncing}
             style={{
               padding: '10px 18px',
@@ -534,13 +541,13 @@ export default function AdminPage() {
             }}
           >
             <RefreshCw size={14} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-            {syncing ? 'Syncing...' : 'Re-Sync JSON'}
+            {syncing ? 'Reloading...' : 'Reload from Disk'}
           </button>
 
           <button
             onClick={() => {
               setEditingProduct(null);
-              setFormData(initialForm);
+              setFormData(createInitialForm());
               setIsAddOpen(true);
             }}
             style={{
@@ -612,8 +619,7 @@ export default function AdminPage() {
       </div>
 
       {/* Tab 1: Jerseys & Inventory Table */}
-      {activeTab === 'jerseys' && (
-        <>
+      <div hidden={activeTab !== 'jerseys'}>
           {/* KPI Stats Strip */}
           <div
             style={{
@@ -1053,46 +1059,45 @@ export default function AdminPage() {
           </table>
         </div>
       </div>
-      </>
-      )}
+      </div>
 
       {/* Tab 2: Brand & Store Identity */}
-      {activeTab === 'brand' && (
+      <div hidden={activeTab !== 'brand'}>
         <BrandSettingsTab
           brand={data.brand}
           onSave={handleSaveBrand}
           syncing={syncing}
         />
-      )}
+      </div>
 
       {/* Tab 3: Shipping & Exchanges */}
-      {activeTab === 'shipping' && (
+      <div hidden={activeTab !== 'shipping'}>
         <ShippingExchangeTab
           shipping={data.brand?.shipping}
           exchange={data.brand?.exchange}
           onSave={handleSaveShipping}
           syncing={syncing}
         />
-      )}
+      </div>
 
       {/* Tab 4: Categories & Quality Grades */}
-      {activeTab === 'taxonomy' && (
+      <div hidden={activeTab !== 'taxonomy'}>
         <TaxonomyTab
           categories={data.categories}
           subCategories={data.subCategories}
           onSave={handleSaveTaxonomy}
           syncing={syncing}
         />
-      )}
+      </div>
 
       {/* Tab 5: Raw JSON & Backups */}
-      {activeTab === 'raw' && (
+      <div hidden={activeTab !== 'raw'}>
         <RawJsonTab
           data={data}
           onSave={handleSaveRawJson}
           syncing={syncing}
         />
-      )}
+      </div>
 
       {/* Add / Edit Product Modal */}
       {isAddOpen && (
