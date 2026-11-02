@@ -8,6 +8,9 @@ const rootDir = path.resolve(__dirname, "..");
 const adminDir = path.join(rootDir, "admin");
 const publicDir = path.join(rootDir, "CC-Hosting-Public");
 
+// If a service never starts binding its port, give up instead of polling forever
+const READY_TIMEOUT_MS = 60000;
+
 console.log("=====================================================");
 console.log("  Crown & Cross — Local Development Runner");
 console.log("=====================================================");
@@ -32,36 +35,50 @@ function openBrowser(url) {
 
 const activePollers = [];
 
-function waitForUrlAndOpen(url, label, delayMs = 0) {
-  let opened = false;
-  const pollInterval = setInterval(() => {
-    if (opened) {
+// Resolves once the URL answers and the browser was triggered;
+// rejects if the service never becomes ready within timeoutMs.
+function waitForUrlAndOpen(url, label, delayMs = 0, timeoutMs = READY_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    let opened = false;
+    const startedAt = Date.now();
+
+    const finish = (fn) => {
+      if (opened) return;
+      opened = true;
       clearInterval(pollInterval);
-      return;
-    }
+      fn();
+    };
 
-    const req = http.get(url, (res) => {
-      if (!opened) {
-        opened = true;
-        clearInterval(pollInterval);
-        setTimeout(() => {
-          console.log(`\n>>> [${label}] is ready! Opening in your browser: ${url}\n`);
-          openBrowser(url);
-        }, delayMs);
+    const pollInterval = setInterval(() => {
+      if (Date.now() - startedAt > timeoutMs) {
+        finish(() =>
+          reject(new Error(`${label} did not become ready at ${url} within ${Math.round(timeoutMs / 1000)}s`))
+        );
+        return;
       }
-      res.resume();
-    });
 
-    req.on("error", () => {
-      // Server still booting up, continue polling
-    });
+      const req = http.get(url, (res) => {
+        res.resume();
+        finish(() => {
+          setTimeout(() => {
+            console.log(`\n>>> [${label}] is ready! Opening in your browser: ${url}\n`);
+            openBrowser(url);
+            resolve();
+          }, delayMs);
+        });
+      });
 
-    req.setTimeout(1000, () => {
-      req.destroy();
-    });
-  }, 600);
+      req.on("error", () => {
+        // Server still booting up, continue polling
+      });
 
-  activePollers.push(pollInterval);
+      req.setTimeout(1000, () => {
+        req.destroy();
+      });
+    }, 600);
+
+    activePollers.push(pollInterval);
+  });
 }
 
 function run(name, command, cwd) {
@@ -103,7 +120,8 @@ function run(name, command, cwd) {
 
   child.on("exit", (code) => {
     if (code !== 0 && code !== null) {
-      console.log(`[${name}] exited with code ${code}`);
+      console.error(`[${name}] exited with code ${code}.`);
+      console.error(`[${name}] Hint: if this happened right after launch, the port may already be in use (Admin=3000, Storefront=3001).`);
     }
   });
 
@@ -140,10 +158,9 @@ let publicProcess = null;
 async function start() {
   try {
     console.log("-----------------------------------------------------");
-    console.log("  Running pre-launch production builds...");
+    console.log("  Running pre-launch production builds (in parallel)...");
     console.log("-----------------------------------------------------\n");
-    await runBuild("Admin Portal", adminDir);
-    await runBuild("Public Storefront", publicDir);
+    await Promise.all([runBuild("Admin Portal", adminDir), runBuild("Public Storefront", publicDir)]);
     console.log("✓ All builds completed successfully! Launching dev servers...\n");
   } catch (err) {
     console.error("Aborting launch due to build failure. Please fix build errors above.");
@@ -157,8 +174,24 @@ async function start() {
   publicProcess = run("Store", "npm run dev", publicDir);
 
   // Automatically open in browser once each service responds
-  waitForUrlAndOpen("http://localhost:3000", "Admin Portal", 0);
-  waitForUrlAndOpen("http://localhost:3001", "Public Storefront", 800);
+  const [adminResult, storeResult] = await Promise.allSettled([
+    waitForUrlAndOpen("http://localhost:3000", "Admin Portal", 0),
+    waitForUrlAndOpen("http://localhost:3001", "Public Storefront", 800)
+  ]);
+
+  let anyFailed = false;
+  if (adminResult.status === "rejected") {
+    anyFailed = true;
+    console.error(`✕ ${adminResult.reason.message}`);
+  }
+  if (storeResult.status === "rejected") {
+    anyFailed = true;
+    console.error(`✕ ${storeResult.reason.message}`);
+  }
+  if (anyFailed) {
+    console.error("\nOne or more services failed to become ready. Check the logs above, fix the issue, and relaunch.");
+    console.error("(The launcher stays alive so you can inspect logs; press Ctrl+C to stop all servers.)\n");
+  }
 }
 
 start();
