@@ -67,7 +67,14 @@ CC-Inventory-Stock/                 (Repo 1 — Private Admin)
 2. **Instant Preview ("View Store")**: An integrated header button in the Admin portal provides 1-click navigation to the live storefront on port 3001.
 3. **Submodule Git Commit**: Commit the updated `products.json` inside `CC-Hosting-Public` and push to its GitHub repository.
 4. **Vercel Auto-Deploy**: Vercel is connected solely to `CC-Hosting-Public` — every push automatically triggers a fresh deployment of the public store within 60 seconds.
-5. **Persistent Storefront Shopping**: Customers on the storefront experience zero-loss shopping sessions via client-side scoped local storage (`cc_cart_v1`, `cc_customer_v1`) without database latency or login barriers.
+5. **Persistent Storefront Shopping**: Customers on the storefront experience zero-loss shopping sessions via client-side scoped local storage (`crown_and_cross_cart_v1`, `crown_and_cross_customer_v1`) without database latency or login barriers.
+
+### Data Integrity & Security
+- **Atomic writes**: every catalog mutation writes `products.json` via a temp file + atomic `rename` — a crash mid-write can never leave a truncated or corrupt catalog.
+- **Server-side derived fields**: `stockQuantity`, `inStock`, `stockStatus`, and `isRetro` are always recomputed from `stockBySize`/`category` on the server; client input never decides them.
+- **Boundary validation**: sizes, images, stock quantities, and prices are type-checked and sanitized at the API; negative stock, malformed `stockBySize`, and duplicate IDs/slugs are rejected.
+- **Taxonomy cascade**: renaming a category/quality grade propagates to products; deleting an entry still in use is refused (409) until products are reassigned.
+- **Localhost by default**: the admin dev server binds to `127.0.0.1`. For network-exposed setups, set `ADMIN_TOKEN` in `admin/.env.local` and `NEXT_PUBLIC_ADMIN_TOKEN` (same value) — the admin UI then sends it as a bearer token automatically.
 
 ---
 
@@ -132,7 +139,7 @@ The Crown & Cross Admin Portal (`http://localhost:3000`) provides comprehensive 
 
 | Command | Description |
 |---|---|
-| `npm run launch` | Compiles pre-flight production builds in both folders, then launches Admin (`:3000`) and Storefront (`:3001`) |
+| `npm run launch` | Compiles pre-flight production builds in both folders (in parallel), then launches Admin (`:3000`) and Storefront (`:3001`) |
 | `npm run install:all` | Installs dependencies in both `admin/` and `CC-Hosting-Public/` |
 | `npm run dev --prefix admin` | Runs only the Admin dashboard on `:3000` |
 | `npm run build --prefix admin` | Creates an optimized production build for the Admin portal |
@@ -144,7 +151,7 @@ The Crown & Cross Admin Portal (`http://localhost:3000`) provides comprehensive 
 ### [Unreleased]
 #### Added
 - **Pre-Flight Production Build Verification**: `scripts/start.js` now executes an automated `npm run build` in each repo directory before launching development servers to prevent runtime deployment surprises.
-- **Root Repository Lockfile**: Added synchronized `package-lock.json` to the root repository matching `CC-Hosting-Public`.
+- **Root Repository Lockfile**: Added a root `package-lock.json` pinning the orchestrator manifest (the two apps keep their own co-located lockfiles).
 - **Limited Stock Guard & In-Cart Awareness**: Clean "In Stock" display without exposing internal unit counts; urgency indicator ("X Left") when $\le 2$; tactile shake feedback and luxury amber toast alerts (`showStockToast`) when attempting to add beyond stock; auto-disabling of Add buttons when available stock is already in cart.
 - **Size-Specific Stock Quantity Matrix (`stockBySize`)**: Managed per-size inventory in Admin with real-time sum auto-calculation, table breakdown badges, and dynamic storefront size disabling with low-stock alerts.
 - **2-Column Mobile Product Grid**: High-density 2-products-per-row grid layout on screens $\le 640\text{px}$ across catalog and related product sections.
@@ -152,12 +159,24 @@ The Crown & Cross Admin Portal (`http://localhost:3000`) provides comprehensive 
 - **Global Interactive Product Search**: Header magnifying glass button and `Ctrl+K`/`Cmd+K` shortcut opening a live modal with real-time product search, available kit names, thumbnails, pricing, and 1-click drilldown.
 - **Instagram Channel Integration**: Clickable Instagram button (`nav-insta-btn`) beside WhatsApp on desktop and mobile, mobile drawer entry, and prominent footer follow card for official handle `@_crown_and_cross_`.
 - **Responsive Announcement Bar Marquee**: Seamless dual-track infinite horizontal scrolling ticker on narrow screens ($\le 860\text{px}$) with touch-drag support and hover pause.
+- **Optional Admin API Auth**: Set `ADMIN_TOKEN` (server) and `NEXT_PUBLIC_ADMIN_TOKEN` (admin UI) to require `Authorization: Bearer` on every admin API call. The admin dev server also binds to `127.0.0.1` by default.
 
 #### Fixed
+- **Atomic Catalog Writes**: `products.json` mutations now write to a temp file and `rename` into place — a crash mid-write can no longer corrupt the catalog (previously a plain `writeFileSync`).
+- **Retro Flag Drift**: `isRetro` is recomputed server-side on every product update and taxonomy rename (previously only set at creation, so category edits left stale flags).
+- **Stock Math Inconsistencies**: `stockBySize` is normalized (plain object, non-negative integers) and `stockQuantity`/`inStock`/`stockStatus` are recomputed on every PUT/PATCH; negative quantities are rejected.
+- **Duplicate Product IDs/Slugs**: POST now rejects client-supplied duplicate IDs (409) and auto-suffixes colliding slugs (`-2`, `-3`, ...).
+- **Launcher Hang on Port Conflict**: `scripts/start.js` now reports a clear error and stops polling when a dev server fails to bind or exits early, instead of polling forever; health polls time out after 60s.
+- **Taxonomy Orphans**: Renaming a category/quality grade cascades to products; removing an entry still in use is blocked (409) unless `force: true`.
+- **Admin Crash Edges**: Search, KPIs, and the edit modal tolerate malformed product fields (non-string names, non-numeric prices, sparse `stockBySize`) without crashing; the edit modal now persists exactly the stock total it displays.
 - **Product Drill-down Client Exception**: Fixed `ReferenceError: relatedKits is not defined` and added case-insensitive, URL-decoded ID matching on `/product/[id]`.
 - **Mobile Section Padding**: Tightened desktop-scale 90px margins and bottom gaps after product grids to 24px on mobile screens.
+- **Seed Data Schema**: `isRetro` normalized onto every product (cc-001/cc-004/cc-006) so the field is always present and consistent with `category`.
 
 #### Changed
+- **"Re-Sync JSON" → "Reload from Disk"**: The header button now pulls the latest `products.json` from disk (it previously force-pushed possibly-stale admin state over the file — a lost-update footgun).
+- **Pre-Flight Builds in Parallel**: `scripts/start.js` compiles both apps concurrently before launching dev servers.
+- **Admin Input Handling**: Search and stats tolerate malformed product fields without crashing.
 - **Stock Display Ergonomics**: Streamlined PDP stock indicator to display `● In Stock` without unit count leakage when stock is healthy ($> 2$), triggering urgency notices strictly when inventory drops to $\le 2$.
 - **Header Actions**: Simplified search and Instagram buttons to icon-only circular buttons.
 - **Footer Support Links**: Standardized labels to `Contact Us: Whatsapp` and `Contact Us: Instagram`.

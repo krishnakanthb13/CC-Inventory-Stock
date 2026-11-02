@@ -46,11 +46,17 @@ Provides atomic file read/write operations targeting `CC-Hosting-Public/public/d
 const jsonFilePath = getJsonFilePath();
 ```
 
+### Write Safety
+- **Atomic writes**: `saveProductsData` serializes to a unique `products.json.tmp-<pid>-<timestamp>` file in the same directory, then `fs.renameSync`s it over `products.json`. `rename` is atomic on the same filesystem, so readers never observe a partially written file and a crash mid-write leaves the previous catalog intact.
+- **Per-request mutation atomicity**: every route handler performs its read-modify-write with synchronous fs calls (no `await` between read and write), so two HTTP requests can never interleave a mutation.
+- **BOM tolerance**: `getProductsData` strips a UTF-8 BOM before `JSON.parse` (Windows editors love inserting them).
+- **Submodule guard**: reads/writes fail with an actionable error (`git submodule update --init --recursive`) when `CC-Hosting-Public` is missing, instead of silently creating a stray directory tree.
+
 ### Exported Functions:
 - **`findRepoRoot()`**: Recursively ascends directory tree from `process.cwd()` and `__dirname` to locate the repository root containing `CC-Hosting-Public`.
 - **`getJsonFilePath()`**: Dynamically returns absolute path to `CC-Hosting-Public/public/data/products.json`.
-- **`getProductsData()`**: Reads and parses `products.json`. Throws informative error if file is missing or contains invalid JSON.
-- **`saveProductsData(fullData)`**: Safely formats with 2-space indentation and writes `fullData` synchronously to `jsonFilePath`. Returns `{ success: true, timestamp }`.
+- **`getProductsData()`**: Reads and parses `products.json` (tolerates a UTF-8 BOM). Throws informative errors if the file is missing, contains invalid JSON, or the `CC-Hosting-Public` submodule is not initialized.
+- **`saveProductsData(fullData)`**: Serializes with 2-space indentation plus a trailing newline, writes to a unique temp file, then atomically `rename`s it over `products.json`. Returns `{ success: true, timestamp }`.
 - **`createSlug(name)`**: Converts jersey names to clean SEO URL slugs (e.g. `"Real Madrid 23/24 Home"` → `"real-madrid-23-24-home"`).
 
 ---
@@ -69,6 +75,15 @@ const jsonFilePath = getJsonFilePath();
 | **`PUT`** | Update existing product | `{ id: "cc-001", updates: { price: 1499, ... } }` | `{ success: true, product }` |
 | **`PATCH`** | Quick stock status toggle | `{ id: "cc-001", stockStatus: "Low Stock", inStock: true }` | `{ success: true, product }` |
 | **`DELETE`** | Remove product | Query Param: `?id=cc-001` | `{ success: true, remaining }` |
+
+### Mutation Guarantees (server-side)
+- **Optional auth**: set `ADMIN_TOKEN` in `admin/.env.local` to require `Authorization: Bearer <token>` on every method. Unset = open (local single-user default). The admin UI sends the token automatically when `NEXT_PUBLIC_ADMIN_TOKEN` is set to the same value.
+- **Derived fields**: `stockQuantity`, `inStock`, `stockStatus`, and `isRetro` are always recomputed server-side from `stockBySize`/`category` — never trusted from client input.
+- **Validation (400)**: `stockBySize` must be a plain object of non-negative numbers; `images` a non-empty array of URL strings; `sizes` a non-empty array of strings; `price`/`mrp` non-negative finite numbers; `stockQuantity` non-negative.
+- **Uniqueness (409)**: a client-supplied product `id` colliding with an existing one is rejected; generated IDs use `cc-<base36-timestamp>-<random4>`; `slug` collisions auto-suffix `-2`, `-3`, ...
+- **Taxonomy cascade**: `updateTaxonomy` diffs entries by `id` — renames cascade to `products[].category`/`subCategory` (and recompute `isRetro`); removing an entry still referenced by products returns **409** unless `force: true`.
+- **Raw JSON overwrite**: `updateRawJson` requires a root object containing a `products` array of objects.
+- **Admin UI reload semantics**: the header **"Reload from Disk"** button performs a `GET /api/products` (pull), never a push — it replaces the admin's in-memory state with what is currently on disk. The `fullSync` POST endpoint remains available for deliberate programmatic pushes only.
 
 ---
 
@@ -112,6 +127,11 @@ const jsonFilePath = getJsonFilePath();
 }
 ```
 
+### Schema Notes
+- **`isRetro` invariant**: always equals `category === 'Retro'`; the API recomputes it on every create, update, and taxonomy rename. Seed products cc-001/cc-004/cc-006 were normalized to carry the field explicitly.
+- **`stockBySize` is the source of truth** for inventory: `stockQuantity` is always its sum, and storefront per-size disabling derives from it.
+- **ID gap note**: `cc-003` is absent from the seed (retired fixture) — IDs are opaque strings, not a sequence.
+
 ---
 
 ## 5. Launcher Architecture: `scripts/start.js` & `scripts/start.bat`
@@ -120,9 +140,11 @@ Coordinates both Next.js applications in a non-blocking cross-platform manner:
 - **Clean Windows Console Output:** `scripts/start.bat` initializes UTF-8 mode (`chcp 65001 >nul`) and clears the screen.
 - **ANSI Code Sanitization:** `scripts/start.js` intercepts `child.stdout` and `child.stderr` through custom stream parsers that strip ANSI escapes (`\u001b\[...`), cursor positioning controls, and unprintable byte noise.
 - **Color & Spinner Control:** Injects `FORCE_COLOR: "0"` and `CI: "1"` into child environments to prevent Next.js interactive spinners from scrambling terminal rows.
-- **Node v24 Windows Compatibility:** Spawns commands with `{ shell: true }` on `win32` to eliminate Node v24 `EINVAL` spawn errors.
-- **Port Allocation:** Spawns `Admin` on `http://localhost:3000` and `Storefront` on `http://localhost:3001`.
-- **HTTP Health Polling (`waitForUrlAndOpen`):** Periodically tests endpoints via lightweight Node `http.get` requests.
+- **Cross-Platform Spawning:** Uses `{ shell: true }` on all platforms (eliminates Node v24 `EINVAL` spawn errors on Windows).
+- **Port Allocation:** Spawns `Admin` on `http://localhost:3000` (bound to `127.0.0.1`) and `Storefront` on `http://localhost:3001`.
+- **Parallel Pre-Flight Builds:** Admin and Storefront production builds compile concurrently (`Promise.all`) before dev servers start.
+- **HTTP Health Polling (`waitForUrlAndOpen`):** Tests endpoints via lightweight Node `http.get` requests with a 60-second overall timeout per service.
+- **Failure Detection:** A failed pre-flight build aborts the launch; a dev server that exits early or never binds is reported with a port-conflict hint instead of polling forever.
 - **Automated Staggered Browser Opener (`openBrowser`):** Automatically opens default browser tabs (immediate for Admin, 800ms offset for Storefront) once each respective server returns an active HTTP status.
 - **Process Cleanup:** Handles `SIGINT` and `SIGTERM` signals with aggressive process tree destruction (`taskkill /pid <PID> /T /F` on Windows) to prevent orphaned Node/port instances.
 
@@ -175,7 +197,7 @@ Provides unified deep-linking that guarantees pre-filled recipient phone (`+91 7
 10. **Dual-Track Infinite Announcement Marquee:** On narrow screens ($\le 860\text{px}$), `.navbar-announcement` activates a dual-track CSS keyframe loop (`bannerMarquee` over 26s). Track cloning ensures zero visual stutter or gap, while `-webkit-overflow-scrolling: touch` allows manual swipe inspection and auto-pauses on hover/focus.
 11. **Global Search Modal Architecture (`components/SearchModal.jsx`):**
     - Triggered via top navbar magnifying glass icon, mobile drawer, or keyboard shortcut (`Ctrl+K` / `Cmd+K`).
-    - Caches catalog from `/data/products.json` and performs multi-token matching over `name`, `team`, `season`, `category`, `subCategory`, and `description`.
+    - Uses the shared cached catalog (`lib/storeConfig.js`) and performs case-insensitive substring matching over `name`, `team`, `season`, `category`, `subCategory`, and `description`.
     - Explicitly surfaces available product names, team badges, quality tier tags, stock status, and live pricing.
     - 1-click drilldown navigates to `/product/[id]` and cleans up modal state.
 12. **Instagram Channel Routing (`@_crown_and_cross_`):**

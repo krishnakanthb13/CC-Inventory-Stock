@@ -40,7 +40,7 @@ Most jersey vendors obscure their kit origins using vague terminology like "Firs
 A major source of abandoned carts in Indian e-commerce is mandatory account creation (requiring email verification, passwords, and SMS OTPs) and fragile shopping sessions. 
 
 Crown & Cross eliminates this friction:
-- **No Mandatory Accounts, Yet Zero Data Loss:** Customers browse, pick their size, and checkout in seconds. Shopping intent and customer delivery details persist client-side via scoped local storage (`cc_cart_v1`, `cc_customer_v1`), preventing lost progress across page refreshes or tab switches without requiring server-side sessions.
+- **No Mandatory Accounts, Yet Zero Data Loss:** Customers browse, pick their size, and checkout in seconds. Shopping intent and customer delivery details persist client-side via scoped local storage (`crown_and_cross_cart_v1`, `crown_and_cross_customer_v1`), preventing lost progress across page refreshes or tab switches without requiring server-side sessions.
 - **Direct `wa.me` Relationship Bridge:** Orders are formatted into clean ASCII summaries and routed directly to founder Jason Clement (`+91 76959 24602`) through the modern `wa.me` click-to-chat bridge, eliminating intermediate webview blockers and carrier drops.
 - **Instant UPI QR Payments & Trust Engineering:** Standard UPI deep links generate dynamic QR codes for any UPI app (GPay, PhonePe, Paytm). Bank-traceable order notes (`tn`), reference tracking (`tr`), 1-click Order ID copying, and visible trust badges ensure total payment clarity.
 
